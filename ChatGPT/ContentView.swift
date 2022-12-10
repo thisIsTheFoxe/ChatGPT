@@ -11,16 +11,18 @@ struct ContentView: View {
     @State var text = ""
     @State private var messages: [UIMessage] = []
     @State private var canSend = true
+    @FocusState private var isFocused: Bool
 
     let api = OpenAI()
     
     var body: some View {
         NavigationStack {
             Spacer()
-            MessageList(messages: $messages)
+            MessageList(isFocused: $isFocused, messages: $messages)
             TextField("Type Message...", text: $text, onCommit: {
                 sendMessage(inputText: text)
             })
+            .focused($isFocused)
             .submitLabel(.send)
             .padding()
             Button("Send") {
@@ -57,7 +59,7 @@ struct ContentView: View {
     }
     
     func sendMessage(inputText: String) {
-        guard canSend else { return }
+        guard canSend, !inputText.isEmpty else { return }
         canSend = false
         let request = ChatRequest(prompt: inputText, messageId: UUID().uuidString.lowercased())
         DispatchQueue.main.async {
@@ -97,6 +99,7 @@ struct MessageView: View {
 }
 
 struct MessageList: View {
+    var isFocused: FocusState<Bool>.Binding
     @Binding var messages: [UIMessage]
     var body: some View {
         ScrollViewReader { proxy in
@@ -114,6 +117,10 @@ struct MessageList: View {
                     }
                 }
             }
+        }
+        .onTapGesture {
+            // dismiss keyboard
+            isFocused.wrappedValue = false
         }
     }
 }
