@@ -59,4 +59,9 @@ class OpenAI {
         }
         .resume()
     }
+    
+    func reset() {
+        conversationId = nil
+        parentId = UUID().uuidString.lowercased()
+    }
 }

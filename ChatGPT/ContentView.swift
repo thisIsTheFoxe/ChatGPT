@@ -29,6 +29,14 @@ struct ContentView: View {
             .padding(.bottom)
             .navigationTitle("ChatGPT")
             .toolbar(content: {
+                Button {
+                    api.reset()
+                    messages.removeAll()
+                    text.removeAll()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise.circle")
+                }
+
                 if !messages.isEmpty {
                     Button {
                         let allMsg = messages.map({ "\($0.sender.rawValue): \($0.content)" }).joined(separator: "\n")
@@ -79,6 +87,7 @@ struct MessageView: View {
                 .padding(5)
                 .background(message.sender == .user ? .gray : message.sender == .chatgpt ? .blue : .red)
                 .cornerRadius(5)
+                .padding(message.sender == .user ? .leading : .trailing, 24)
             if message.sender != .user {
                 Spacer()
             }
