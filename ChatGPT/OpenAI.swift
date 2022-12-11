@@ -12,16 +12,18 @@ class OpenAI {
     static var jwt_access = "<#insert ChatGPT access JWT (optional)#>"
 //    static let apiKey = "<#api key (unused)#>"
     
+    var hasValidSessionToken: Bool { !OpenAI.jwt_session.isEmpty && !OpenAI.jwt_session.hasPrefix("<") }
+    
     init() {
-        if !OpenAI.jwt_session.isEmpty {
-            reset(completion: { _ in })
+        if hasValidSessionToken {
+            refresh(completion: { _ in })
         }
     }
 
     var conversationId: String?
     var parentId: String = UUID().uuidString.lowercased()
     
-    func chat(message: ChatRequest, completion: @escaping (ChatResponse?, Error?) -> Void) {
+    func chat(message: ChatRequest, completion: @escaping (Result<ChatResponse, Error>) -> Void) {
         var req = URLRequest(url: URL(string: "https://chat.openai.com/backend-api/conversation")!)
         req.addValue("Bearer \(OpenAI.jwt_access)", forHTTPHeaderField: "Authorization")
         req.addValue("https://chat.openai.com/chat", forHTTPHeaderField: "Referer")
@@ -47,39 +49,48 @@ class OpenAI {
         URLSession.shared.dataTask(with: req) { data, resp, err in
             print("callback")
             guard let data = data else {
-                print(err, resp)
-                if err == nil, let statusCode = (resp as? HTTPURLResponse)?.statusCode, let httpError = HTTPResponseError(rawValue: statusCode) {
-                    completion(nil, httpError)
-                } else {
-                    completion(nil, err)
-                }
-                return
+                print(err, resp.debugDescription)
+                return self.errorCompletion(resp: resp, err: err, completion: completion)
             }
             print("has data")
             
             guard let lines = String(data: data, encoding: .utf8)?.split(separator: "\n"),
                   lines.count > 3,
-                  let jsonData = lines[lines.count-3].trimmingPrefix("data: ").data(using: .utf8),
-                    let response = try? JSONDecoder().decode(ChatResponse.self, from: jsonData) else {
+                  let jsonData = lines[lines.count - 3].trimmingPrefix("data: ").data(using: .utf8),
+                  let response = try? JSONDecoder().decode(ChatResponse.self, from: jsonData) else {
                 print(String(data: data, encoding: .utf8))
-                completion(nil, nil)
-                return
+                return self.errorCompletion(resp: resp, err: err, completion: completion)
             }
             print("success", response.message.content)
             self.conversationId = response.conversationID
             self.parentId = response.message.id
-            completion(response, nil)
+            completion(.success(response))
         }
         .resume()
+    }
+    
+    private func errorCompletion(resp: URLResponse?, err: Error?, completion: @escaping (Result<ChatResponse, Error>) -> Void) {
+        if err == nil, let statusCode = (resp as? HTTPURLResponse)?.statusCode, let httpError = HTTPResponseError(rawValue: statusCode) {
+            completion(.failure(httpError))
+        } else if let err {
+            completion(.failure(err))
+        } else {
+            completion(.failure(HTTPResponseError.unknown))
+        }
     }
     
     func reset(completion: @escaping (UIMessage) -> Void) {
         conversationId = nil
         parentId = UUID().uuidString.lowercased()
-        refresh(completion: completion)
+        if hasValidSessionToken {
+            refresh(completion: completion)
+        }
     }
     
     func refresh(completion: @escaping (UIMessage) -> Void) {
+        guard hasValidSessionToken else {
+            return completion(UIMessage(id: UUID().uuidString, sender: .error, content: "No session token provided, could not update access token."))
+        }
         var req = URLRequest(url: URL(string: "https://chat.openai.com/api/auth/session")!)
         req.addValue("Bearer \(OpenAI.jwt_session)", forHTTPHeaderField: "Authorization")
         req.addValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
@@ -118,6 +129,14 @@ struct User: Codable {
 //    let features: [JSONAny]
 }
 
-enum HTTPResponseError: Int, Error {
-    case unauthorized = 401
+enum HTTPResponseError: Int, LocalizedError {
+    case unauthorized = 401, badResponse = -1, unknown = 0
+    
+    var errorDescription: String? {
+        switch self {
+        case .unauthorized: return "Error 401: Unauthorized"
+        case .badResponse: return "Bad data."
+        case .unknown: return "Unknown error."
+        }
+    }
 }

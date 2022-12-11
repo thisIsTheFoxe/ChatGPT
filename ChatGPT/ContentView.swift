@@ -67,11 +67,13 @@ struct ContentView: View {
             self.messages.append(UIMessage(id: request.messageId, sender: .user, content: request.prompt))
         }
         
-        api.chat(message: request) { response, error in
-            if let response = response {
+        api.chat(message: request) { result in
+            switch result {
+            case .success(let response):
                 messages.append(UIMessage(id: response.message.id, sender: .chatgpt, content: response.message.content.parts.joined()))
-            } else if let error = error {
+            case .failure(let error):
                 messages.append(UIMessage(id: UUID().uuidString, sender: .error, content: error.localizedDescription))
+
             }
             canSend = true
         }
@@ -97,7 +99,6 @@ struct MessageView: View {
                     } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
-
                 }
             if message.sender != .user {
                 Spacer()
