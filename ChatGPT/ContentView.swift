@@ -32,9 +32,9 @@ struct ContentView: View {
             .navigationTitle("ChatGPT")
             .toolbar(content: {
                 Button {
-                    api.reset()
                     messages.removeAll()
                     text.removeAll()
+                    api.reset { messages.append($0) }
                 } label: {
                     Image(systemName: "arrow.counterclockwise.circle")
                 }
@@ -86,10 +86,19 @@ struct MessageView: View {
                 Spacer()
             }
             Text(message.content)
+                .textSelection(.enabled)
                 .padding(5)
                 .background(message.sender == .user ? .gray : message.sender == .chatgpt ? .blue : .red)
                 .cornerRadius(5)
                 .padding(message.sender == .user ? .leading : .trailing, 24)
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = message.content
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+
+                }
             if message.sender != .user {
                 Spacer()
             }
